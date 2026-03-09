@@ -1,0 +1,160 @@
+;
+
+(progn
+
+; uLisp Query Language - 9th April 2019
+; See http://www.ulisp.com/show?2I60
+;
+
+; DaDatabasetabase
+
+(defvar *rules* nil)
+
+(defun add (rule)
+  (unless (assoc (car rule) *rules*) (push (list (car rule)) *rules*))
+  (push (cdr rule) (cdr (assoc (car rule) *rules*)))
+  t)
+
+; Match
+
+(defun match (x y &optional binds)
+  (cond
+   ((eq x y) (if binds binds '((t))))
+   ((assoc x binds) (match (binding x binds) y binds))
+   ((assoc y binds) (match x (binding y binds) binds))
+   ((var? x) (cons (cons x y) binds))
+   ((var? y) (cons (cons y x) binds))
+   (t
+    (when (and (consp x) (consp y))
+      (let ((m (match (car x) (car y) binds)))
+        (when m (match (cdr x) (cdr y) m)))))))
+
+(defun var? (x)
+  (and (symbolp x) (eq (char (string x) 0) #\?)))
+
+(defun binding (x binds)
+  (let ((b (assoc x binds)))
+    (when b 
+      (or (binding (cdr b) binds)
+          (cdr b)))))
+
+; Inference
+
+(defun query (expr &optional binds)
+  (case (car expr)
+    (and (query-and (reverse (cdr expr)) binds))
+    (or (query-or (cdr expr) binds))
+    (not (query-not (second expr) binds))
+    (test (query-test (second expr) binds))
+    (t (lookup (car expr) (cdr expr) binds))))
+
+(defun lookup (pred args &optional binds)
+  (mapcan 
+   (lambda (x)
+     (let ((m (match args x binds)))
+       (when m (list m))))
+   (cdr (assoc pred *rules*))))
+ 
+(defun query-and (clauses binds)
+  (if (null clauses)
+      (list binds)
+    (mapcan (lambda (b) (query (car clauses) b))
+            (query-and (cdr clauses) binds))))
+ 
+(defun query-or (clauses binds)
+  (apply 'append (mapcar (lambda (c) (query c binds)) clauses)))
+ 
+(defun query-not (clause binds)
+  (unless (query clause binds)
+    (list binds)))
+
+(defun subs (lst binds)
+  (cond
+   ((null lst) nil)
+   ((atom lst) (if (assoc lst binds) (cdr (assoc lst binds)) lst))
+   (t (cons (subs (car lst) binds) (subs (cdr lst) binds)))))
+
+(defun query-test (tst binds)
+  (when (eval (subs tst binds))
+    (list binds)))
+
+(defun answer (expr output)
+  (dolist (binds (query expr nil))
+    (mapc (lambda (p) (princ p) (princ #\space)) (subs output binds))
+    (terpri)))
+
+(defun read-data ()
+  (dolist (rules *data*)
+    (let ((pred (first rules))
+          (data (cdr rules)))
+      (mapc (lambda (rule) (add (cons (first rule) (cons pred (cdr rule))))) data)))
+  t)
+
+;
+; The ATtiny database v3 - 9th April 2019
+; See http://www.ulisp.com/show?2I60
+;
+
+(defvar *data*
+  '((attinyX5 (pins 8) (io 5) (adc 4) (pwm 3) (usi 1) (timer8 2) (crystal) (pll))
+    (attiny85 (family attinyx5) (flash 8192) (ram 512) (eeprom 512) (price soic 72) (price pdip 90))
+    (attiny45 (family attinyx5) (flash 4096) (ram 256) (eeprom 256) (price soic 77) (price pdip 85)) 
+    (attiny25 (family attinyx5) (flash 2048) (ram 128) (eeprom 128) (price soic 79) (price pdip 83)) 
+    
+    (attinyX4 (pins 14) (io 11) (adc 8) (pwm 4) (usi 1) (timer8 1) (timer16 1) (crystal))
+    (attiny84 (family attinyX4) (flash 8192) (ram 512) (eeprom 512) (price soic 60) (price pdip 87))
+    (attiny44 (family attinyX4) (flash 4096) (ram 256) (eeprom 256) (price soic 56) (price pdip 86))
+    (attiny24 (family attinyX4) (flash 2048) (ram 128) (eeprom 128) (price soic 52) (price pdip 83))
+
+    (attinyX313 (pins 20) (io 17) (pwm 3) (uart 1) (usi 1) (timer8 1) (timer16 1) (crystal))
+    (attiny4313 (family attinyX313) (flash 4096) (ram 256) (eeprom 256) (price soic 70) (price pdip 98))
+    (attiny2313 (family attinyX313) (flash 2048) (ram 128) (eeprom 128) (price soic 82) (price pdip 99))
+
+    (attinyX41 (pins 14) (io 11) (adc 12) (uart 2) (i2c slave) (timer8 1) (timer16 2) (crystal))
+    (attiny841 (family attinyX41) (flash 8192) (ram 512) (eeprom 512) (price soic 78))
+    (attiny441 (family attinyX41) (flash 4096) (ram 256) (eeprom 256) (price soic 73))
+
+    (attinyX61 (pins 20) (io 15) (adc 11) (pwm 3) (usi 1) (timer8 1) (timer16 1) (crystal) (pll))
+    (attiny861 (family attinyX61) (flash 8192) (ram 512) (eeprom 512) (price soic 92) (price pdip 110))
+    (attiny461 (family attinyX61) (flash 4096) (ram 256) (eeprom 256) (price soic 85) (price pdip 129))
+    (attiny261 (family attinyX61) (flash 2048) (ram 128) (eeprom 128) (price soic 83) (price pdip 107))
+
+    (attinyX7 (pins 20) (io 16) (adc 11) (pwm 3) (uart 1) (usi 1) (timer8 1) (timer16 1) (crystal) (lin))
+    (attiny167 (family attinyX7) (flash 16384) (ram 512) (eeprom 512) (price soic 111))
+    (attiny87 (family attinyX7) (flash 8192) (ram 512) (eeprom 512) (price soic 124))
+
+    (attinyX8 (pins 28) (io 27) (adc 8) (pwm 4) (i2c master) (i2c slave) (usi 1) (timer8 1) (timer16 1))
+    (attiny88 (family attinyX8) (flash 8192) (ram 512) (eeprom 64) (price tqfp 76) (price pdip 143))
+    (attiny48 (family attinyX8) (flash 4096) (ram 256) (eeprom 64) (price tqfp 78) (price pdip 131))
+    
+    (attinyX34 (pins 20) (io 17) (adc 12) (pwm 4) (i2c slave) (uart 2) (usi 1) (timer8 1) (timer16 1) (crystal))
+    (attiny1634 (family attinyX34) (flash 16384) (ram 1024) (eeprom 256) (price soic 118))
+
+    (attinyX28 (pins 32) (io 27) (adc 28) (pwm 4) (i2c slave) (uart 1) (timer8 1) (timer16 1))
+    (attiny828 (family attinyX28) (flash 8192) (ram 512) (eeprom 512) (price tqfp 84))
+
+    (attinyX3 (pins 20) (io 15) (adc 4) (pwm 4) (usi 1) (timer8 1) (timer16 1) (boost))
+    (attiny43 (family attinyX3) (flash 4096) (ram 512) (eeprom 64) (price soic 147))
+    
+    (attiny9/10 (pins 6) (io 4) (adc 4) (pwm 2) (timer16 1))
+    (attiny4/5 (pins 6) (io 4) (pwm 2) (timer16 1))
+    (attiny10 (family attiny9/10) (flash 1024) (ram 32) (price sot 25))
+    (attiny9 (family attiny9/10) (flash 512) (ram 32) (price sot 25))
+    (attiny5 (family attiny4/5) (flash 1024) (ram 32) (price sot 23))
+    (attiny4 (family attiny4/5) (flash 512) (ram 32) (price sot 27))))
+    
+    (read-data)
+    
+    ; test queries
+    
+    (print "Find the price (in pence) of each chip with 8 Kbytes of flash:") (terpri)
+    (answer '(and (flash ?c ?x) (price ?c ?k ?p) (test (= ?x 8192))) '("Chip:" ?c "Package:" ?k "Price:" ?p))
+    
+    (print "Find all chips with at least 10 Kbytes of flash:") (terpri)
+    (answer '(and (flash ?c ?x) (test (> ?x 10240))) '("Flash > 10K:" ?c))
+    
+    (print "Find all chips that have at least three timers (8-bit or 16-bit):") (terpri)
+    (answer '(and (family ?c ?f) (timer8 ?f ?x) (timer16 ?f ?y) (test (>= (+ ?x ?y) 3))) '("3 Timers:" ?c))
+    
+    
+    )
